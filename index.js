@@ -1,10 +1,20 @@
 const http = require("http");
 const url = require("url");
-const StringDecoder = require("string_decoder").StringDecoder;
+const { StringDecoder } = require("string_decoder");
 const config = require("./config");
+
+//creating a http server
 
 let httpServer = http.createServer((req, res) => {
   myServer(req, res);
+});
+
+httpServer.listen(config.httpPort, () => {
+  console.log(
+    `The server is listening on port ${config.httpPort} and is in ${
+      config.envName
+    } mode`
+  );
 });
 
 let myServer = (req, res) => {
@@ -14,38 +24,43 @@ let myServer = (req, res) => {
   //get that path we are requesting
   let path = parsedUrl.pathname;
 
-  //trim that SOB with regex
+  //trim that path with regex
   let trimmedPath = path.replace(/^\/+|\/+$/g, "");
 
   //we need to get that query
-  let queryStringObject = parsedUrl.queryStringObject;
+  let queryStringObject = parsedUrl.query;
 
-  //Gotta get the method you know like get post delete
+  //Find the method you know like get post delete
   let method = req.method.toLowerCase();
 
-  //Headers baby
-  let header = req.headers;
+  //Headers
+  let headers = req.headers;
 
   //Got any payload?
 
   let decoder = new StringDecoder("utf-8");
   let buffer = "";
-  req.on("data", () => {
-    buffer += decoder.end();
+
+  req.on("data", data => {
+    buffer += decoder.write(data);
   });
 
-  let chosenHandler =
-    typeof router.trimmedPath !== "undefined"
-      ? router.trimmedPath
-      : handler.notFound;
+  req.on("end", () => {
+    buffer = +decoder.end();
+  });
 
   let data = {
-    trimmedPath,
-    queryStringObject,
-    method,
-    header,
-    payload: "buffer"
+    method: method,
+    trimmedPath: trimmedPath,
+    queryStringObject: queryStringObject,
+    headers: headers,
+    payload: buffer
   };
+
+  let chosenHandler =
+    typeof router[trimmedPath] !== "undefined"
+      ? router[trimmedPath]
+      : handlers.notFound;
 
   chosenHandler(data, (statusCode, payload) => {
     statusCode = typeof statusCode == "number" ? statusCode : 204;
@@ -54,20 +69,30 @@ let myServer = (req, res) => {
 
     let payloadString = JSON.stringify(payload);
 
+    res.setHeader("Content-Type", "application/json");
     res.writeHead(statusCode);
     res.end(payloadString);
+
+    console.log(
+      `Returing this response for ${trimmedPath} path with a ${statusCode} and ${payloadString} `
+    );
   });
 };
 
-let handler = {};
+//Path handlers object
+let handlers = {};
 
-handler.hello = (data, callback) => {
-  callback(200, { name: "sample handler" });
+//hello path
+handlers.hello = (data, callback) => {
+  callback(200, { message: "Hey there. How you doing?" });
 };
 
-handler.notFound = (data, callback) => {
-  callback(404);
+//defualt not found
+handlers.notFound = (data, callback) => {
+  callback(404, { message: "Whoops not found buddy" });
 };
+
+//router object
 let router = {
-  hello: handler.hello
+  hello: handlers.hello
 };
